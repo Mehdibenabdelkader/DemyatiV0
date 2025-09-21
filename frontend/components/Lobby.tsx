@@ -136,7 +136,7 @@ export default function Lobby({ nickname, mode, onStarted, onBack }: Props) {
   }
 
   return (
-    <div style={{ padding: 24, minHeight: "100vh", background: "var(--background)", color: "var(--foreground)" }}>
+    <div style={{ padding: 24, minHeight: "100vh", background: "transparent", color: "var(--foreground)" }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <button onClick={onBack} style={{ padding: "6px 10px", borderRadius: 6 }}>Back</button>

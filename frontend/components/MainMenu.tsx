@@ -33,17 +33,14 @@ export default function MainMenu({ onHost, onJoin }: Props) {
       justifyContent: "center",
       padding: 24,
       boxSizing: "border-box",
-      background: "var(--background)",
+      /* let the global body background show through */
+      background: "transparent",
       color: "var(--foreground)",
     }}>
       <div style={{ width: 480, maxWidth: "100%", textAlign: "center" }}>
-        {/* Simple SVG title */}
+        {/* Title image from public folder */}
         <div style={{ marginBottom: 24 }} aria-hidden>
-          <svg width="100%" height="120" viewBox="0 0 600 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Demyati title">
-            <rect width="100%" height="100%" fill="transparent" />
-            <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fontFamily="Segoe UI, Roboto, Arial" fontSize="44" fill="var(--accent-700)">Demyati</text>
-            <text x="50%" y="82%" dominantBaseline="middle" textAnchor="middle" fontFamily="Segoe UI, Roboto, Arial" fontSize="14" fill="var(--muted)">Reach tile 200 — prime-powered cards!</text>
-          </svg>
+          <img src="/GameTitleImg.svg" alt="Demyati" style={{ width: "100%", height: 220, objectFit: "contain" }} />
         </div>
 
         <div style={{ marginBottom: 12, textAlign: "left" }}>
@@ -77,7 +74,14 @@ export default function MainMenu({ onHost, onJoin }: Props) {
               borderRadius: 8,
               cursor: "pointer",
               fontWeight: 600,
+              color: "#15362C",
+              background: "linear-gradient(to bottom, #FCC877 0%, #967747 100%)",
+              boxShadow: "0 2px 6px rgba(0,0,0,0.12)",
             }}
+            onMouseOver={(e) => (e.currentTarget.style.filter = "brightness(0.98)")}
+            onMouseOut={(e) => (e.currentTarget.style.filter = "none")}
+            onFocus={(e) => (e.currentTarget.style.outline = "3px solid rgba(150,119,71,0.25)")}
+            onBlur={(e) => (e.currentTarget.style.outline = "none")}
           >
             Host a room
           </button>
@@ -86,13 +90,18 @@ export default function MainMenu({ onHost, onJoin }: Props) {
             onClick={handleJoin}
             style={{
               padding: "10px 18px",
-              background: "var(--accent-50)",
-              color: "var(--accent-900)",
+              background: "linear-gradient(to bottom, #FCC877 0%, #967747 100%)",
+              color: "#15362C",
               border: "none",
               borderRadius: 8,
               cursor: "pointer",
               fontWeight: 600,
+              boxShadow: "0 2px 6px rgba(0,0,0,0.12)",
             }}
+            onMouseOver={(e) => (e.currentTarget.style.filter = "brightness(0.98)")}
+            onMouseOut={(e) => (e.currentTarget.style.filter = "none")}
+            onFocus={(e) => (e.currentTarget.style.outline = "3px solid rgba(150,119,71,0.25)")}
+            onBlur={(e) => (e.currentTarget.style.outline = "none")}
           >
             Join a room
           </button>

@@ -23,7 +23,7 @@ export default function Game({ nickname, mode, onBack }: Props) {
   }
 
   return (
-    <div style={{ padding: 24, background: "var(--background)", color: "var(--foreground)", minHeight: "100vh" }}>
+    <div style={{ padding: 24, background: "transparent", color: "var(--foreground)", minHeight: "100vh" }}>
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <button onClick={onBack} style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--accent-100)" }}>
