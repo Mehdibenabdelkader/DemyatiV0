@@ -35,11 +35,32 @@
 }
 
 body {
-  background: var(--background);
+  background: url('/Patternbg.svg') center center / cover no-repeat fixed;
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Ensure root-level background color still controls overlay for dark/light themes */
+html, body, #__next {
+  height: 100%;
+}
+
+/* If you want a subtle overlay to preserve contrast, you can use a pseudo-element */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(rgba(0,0,0,0), rgba(0,0,0,0));
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Make sure app content sits above the background layer */
+body > * {
+  position: relative;
+  z-index: 1;
 }
 
 /* small helpers */

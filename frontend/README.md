@@ -1,5 +1,7 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+Note: this project uses `public/Patternbg.svg` as the global background image for the app (configured in `app/globals.css`).
+
 ## Getting Started
 
 First, run the development server:
