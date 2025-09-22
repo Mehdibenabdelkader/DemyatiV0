@@ -60,7 +60,7 @@ export default function MainMenu({ onHost, onJoin }: Props) {
             }}
           />
           {touched && !valid ? (
-            <div style={{ color: "#ef4444", marginTop: 8, fontSize: 13 }}>Nickname can't be empty.</div>
+            <div style={{ color: "#ef4444", marginTop: 8, fontSize: 13 }}>Nickname can&apos;t be empty.</div>
           ) : null}
         </div>
 

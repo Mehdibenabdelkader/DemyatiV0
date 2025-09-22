@@ -24,7 +24,19 @@ type PlayerView = {
 };
 
 export default function Lobby({ nickname, mode, onStarted, onBack }: Props) {
-  const [playerId] = useState(() => genId());
+  const [playerId] = useState(() => {
+    try {
+      const key = "demyati_player_id";
+      // use sessionStorage so each tab gets a unique id
+      const existing = sessionStorage.getItem(key);
+      if (existing) return existing;
+      const id = genId();
+      sessionStorage.setItem(key, id);
+      return id;
+    } catch (_err) {
+      return genId();
+    }
+  });
   const [code, setCode] = useState<string | null>(null);
   const [players, setPlayers] = useState<PlayerView[]>([]);
   const [color, setColor] = useState(COLORS[0]);
@@ -36,11 +48,18 @@ export default function Lobby({ nickname, mode, onStarted, onBack }: Props) {
     // on mount: create or join
     const p: PlayerView = { id: playerId, name: nickname, color, ready: false };
     if (mode === "host") {
-      const c = createRoom({ ...p, isHost: true });
-      setCode(c);
-      setIsHost(true);
-  joinedRef.current = true;
-  console.log("[lobby] created room", c, "hostId", playerId, "nickname", nickname);
+      (async () => {
+        try {
+          const c = await createRoom({ ...p, isHost: true });
+          setCode(c);
+          setIsHost(true);
+          joinedRef.current = true;
+          console.log("[lobby] created room", c, "hostId", playerId, "nickname", nickname);
+        } catch (_e) {
+          console.error("createRoom failed", _e);
+          onBack();
+        }
+      })();
     } else {
       // Guard prompt so it only appears once even if React Strict Mode mounts twice in dev
       // Module-level set `__joinedPrompted` is used to remember that this player has already been prompted
@@ -52,20 +71,27 @@ export default function Lobby({ nickname, mode, onStarted, onBack }: Props) {
       const prompted: Set<string> = globalThis.__joinedPrompted;
       if (!prompted.has(playerId)) {
         prompted.add(playerId);
-        const entered = window.prompt("Enter room code to join:");
-        if (!entered) {
-          onBack();
-          return;
-        }
-        const ok = joinRoom(entered, p);
-  console.log("[lobby] join attempt", entered, ok, p);
-        if (!ok) {
-          window.alert("Room not found");
-          onBack();
-          return;
-        }
-  setCode(entered);
-  joinedRef.current = true;
+        (async () => {
+          try {
+            const entered = window.prompt("Enter room code to join:");
+            if (!entered) {
+              onBack();
+              return;
+            }
+            const ok = await joinRoom(entered, p);
+            console.log("[lobby] join attempt", entered, ok, p);
+            if (!ok) {
+              window.alert("Room not found");
+              onBack();
+              return;
+            }
+            setCode(entered);
+            joinedRef.current = true;
+          } catch (_err) {
+            console.error("joinRoom failed", _err);
+            onBack();
+          }
+        })();
       }
       // if already prompted in a previous mount, do nothing — the join should have been handled by that mount
     }
@@ -78,16 +104,17 @@ export default function Lobby({ nickname, mode, onStarted, onBack }: Props) {
   useEffect(() => {
     if (!code) return;
 
-    const handleUpdate = (rooms?: Record<string, any>) => {
-      const room = rooms ? rooms[code] : getRoom(code);
+    type Room = { code: string; players: Array<{ id: string; name: string; color: string; ready: boolean }>; started: boolean; hostId?: string };
+    const handleUpdate = async (rooms?: Record<string, Room>) => {
+      const room = rooms ? rooms[code] : await getRoom(code);
       console.log("[lobby] handleUpdate for code", code, room);
       if (!room) {
         console.log("[lobby] room deleted, returning to main menu", code);
         onBack();
         return;
       }
-  const playersList: Array<{ id: string; name: string; color: string; ready: boolean; isHost?: boolean }> = room.players;
-  setPlayers(playersList.map((p) => ({ id: p.id, name: p.name, color: p.color, ready: p.ready, isHost: p.id === room.hostId })));
+      const playersList: Array<{ id: string; name: string; color: string; ready: boolean; isHost?: boolean }> = room.players;
+      setPlayers(playersList.map((p) => ({ id: p.id, name: p.name, color: p.color, ready: p.ready, isHost: p.id === room.hostId })));
       if (room.hostId === playerId) setIsHost(true);
       if (room.started) onStarted(code);
     };
@@ -98,7 +125,7 @@ export default function Lobby({ nickname, mode, onStarted, onBack }: Props) {
   const unsub = onRoomsUpdate((rooms) => handleUpdate(rooms));
 
     // small timeout to cover eventual consistency
-    const t = setTimeout(handleUpdate, 50);
+    const t = setTimeout(() => handleUpdate(), 50);
 
     return () => {
       clearTimeout(t);
