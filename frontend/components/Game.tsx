@@ -5,14 +5,16 @@ import Lobby from "./Lobby";
 import { getRoom, onRoomsUpdate, updatePlayer } from "../lib/rooms";
 
 type Props = {
-  nickname: string;
-  mode: "host" | "join";
+  roomCode?: string;
+  nickname?: string;
+  mode?: "host" | "join";
+  started?: boolean;
   onBack: () => void;
 };
 
-export default function Game({ nickname, mode, onBack }: Props) {
-  const [started, setStarted] = useState(false);
-  const [roomCode, setRoomCode] = useState<string | null>(null);
+export default function Game({ roomCode: propRoomCode, nickname, mode, started: propStarted, onBack }: Props) {
+  const [started, setStarted] = useState(propStarted || false);
+  const [roomCode, setRoomCode] = useState<string | null>(propRoomCode || null);
   const [players, setPlayers] = useState<Array<{ id: string; name: string; color: string; ready: boolean; tile?: number }>>([]);
   const [lastRoll, setLastRoll] = useState<number | null>(null);
 
@@ -49,11 +51,98 @@ export default function Game({ nickname, mode, onBack }: Props) {
   }, [roomCode]);
 
   if (!started) {
+    // If we have a roomCode from URL but no nickname/mode, we need to get player info
+    if (roomCode && (!nickname || !mode)) {
+      return (
+        <div style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "transparent",
+          color: "var(--foreground)"
+        }}>
+          <div style={{ textAlign: "center" }}>
+            <h2>Join Room {roomCode}</h2>
+            <p>Please enter your nickname to join this room</p>
+            <div style={{ marginTop: 20 }}>
+              <input
+                type="text"
+                placeholder="Enter your nickname"
+                style={{
+                  padding: "8px 12px",
+                  fontSize: 16,
+                  borderRadius: 6,
+                  border: "1px solid var(--accent-100)",
+                  marginRight: 8
+                }}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    const name = (e.target as HTMLInputElement).value.trim();
+                    if (name) {
+                      // Store nickname and redirect to lobby
+                      sessionStorage.setItem('demyati_nickname', name);
+                      const playerId = Math.random().toString(36).slice(2, 9);
+                      sessionStorage.setItem('demyati_player_id', playerId);
+                      window.location.href = `/game/${roomCode}?playerId=${playerId}`;
+                    }
+                  }
+                }}
+              />
+              <button
+                onClick={() => {
+                  const input = document.querySelector('input') as HTMLInputElement;
+                  const name = input?.value.trim();
+                  if (name) {
+                    sessionStorage.setItem('demyati_nickname', name);
+                    const playerId = Math.random().toString(36).slice(2, 9);
+                    sessionStorage.setItem('demyati_player_id', playerId);
+                    window.location.href = `/game/${roomCode}?playerId=${playerId}`;
+                  }
+                }}
+                style={{
+                  padding: "8px 16px",
+                  background: "linear-gradient(to bottom, #FCC877 0%, #967747 100%)",
+                  color: "#15362C",
+                  border: "none",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  fontWeight: 600
+                }}
+              >
+                Join
+              </button>
+            </div>
+            <button
+              onClick={onBack}
+              style={{
+                padding: "6px 12px",
+                marginTop: 16,
+                background: "transparent",
+                color: "var(--muted)",
+                border: "1px solid var(--accent-100)",
+                borderRadius: 6,
+                cursor: "pointer"
+              }}
+            >
+              Back to Main Menu
+            </button>
+          </div>
+        </div>
+      );
+    }
+    
     return (
-      <Lobby nickname={nickname} mode={mode} onBack={onBack} onStarted={(code) => {
-        setRoomCode(code);
-        setStarted(true);
-      }} />
+      <Lobby 
+        nickname={nickname || ""} 
+        mode={mode || "join"} 
+        roomCode={roomCode}
+        onBack={onBack} 
+        onStarted={(code) => {
+          setRoomCode(code);
+          setStarted(true);
+        }} 
+      />
     );
   }
   return (
