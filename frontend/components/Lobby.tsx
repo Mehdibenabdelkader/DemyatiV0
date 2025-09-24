@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoom, joinRoom, leaveRoom, updatePlayer, getRoom, startGame, onRoomsUpdate } from "../lib/rooms";
 function genId() {
   return Math.random().toString(36).slice(2, 9);
@@ -9,6 +9,7 @@ function genId() {
 type Props = {
   nickname: string;
   mode: "host" | "join";
+  roomCode?: string | null;
   onStarted: (code: string) => void;
   onBack: () => void;
 };
@@ -23,7 +24,7 @@ type PlayerView = {
   isHost?: boolean;
 };
 
-export default function Lobby({ nickname, mode, onStarted, onBack }: Props) {
+export default function Lobby({ nickname, mode, roomCode: propRoomCode, onStarted, onBack }: Props) {
   const [playerId] = useState(() => {
     try {
       const key = "demyati_player_id";
@@ -37,7 +38,7 @@ export default function Lobby({ nickname, mode, onStarted, onBack }: Props) {
       return genId();
     }
   });
-  const [code, setCode] = useState<string | null>(null);
+  const [code, setCode] = useState<string | null>(propRoomCode || null);
   const [players, setPlayers] = useState<PlayerView[]>([]);
   const [color, setColor] = useState(COLORS[0]);
   const [ready, setReady] = useState(false);
@@ -47,7 +48,8 @@ export default function Lobby({ nickname, mode, onStarted, onBack }: Props) {
   useEffect(() => {
     // on mount: create or join
     const p: PlayerView = { id: playerId, name: nickname, color, ready: false };
-    if (mode === "host") {
+    if (mode === "host" && !code) {
+      // Only create room if we don't already have a code (shouldn't happen with new flow)
       (async () => {
         try {
           const c = await createRoom({ ...p, isHost: true });
@@ -57,6 +59,27 @@ export default function Lobby({ nickname, mode, onStarted, onBack }: Props) {
           console.log("[lobby] created room", c, "hostId", playerId, "nickname", nickname);
         } catch (_e) {
           console.error("createRoom failed", _e);
+          onBack();
+        }
+      })();
+    } else if (mode === "host" && code) {
+      // If we already have a code, just set up the host state
+      setIsHost(true);
+      joinedRef.current = true;
+    } else if (code) {
+      // If we have a room code, join it
+      (async () => {
+        try {
+          const ok = await joinRoom(code, p);
+          if (ok) {
+            joinedRef.current = true;
+            console.log("[lobby] joined room", code, "playerId", playerId, "nickname", nickname);
+          } else {
+            console.error("joinRoom failed for code", code);
+            onBack();
+          }
+        } catch (_err) {
+          console.error("joinRoom failed", _err);
           onBack();
         }
       })();
@@ -115,26 +138,38 @@ export default function Lobby({ nickname, mode, onStarted, onBack }: Props) {
       }
       const playersList: Array<{ id: string; name: string; color: string; ready: boolean; isHost?: boolean }> = room.players;
       setPlayers(playersList.map((p) => ({ id: p.id, name: p.name, color: p.color, ready: p.ready, isHost: p.id === room.hostId })));
-      if (room.hostId === playerId) setIsHost(true);
+      
+      // Update local ready state to match server state
+      const currentPlayer = playersList.find(p => p.id === playerId);
+      if (currentPlayer) {
+        console.log("[lobby] Syncing ready state:", currentPlayer.ready, "for player", currentPlayer.name);
+        setReady(currentPlayer.ready);
+      }
+      
+      // Validate that the user's mode matches their actual role
+      const isActuallyHost = room.hostId === playerId;
+      if (mode === 'host' && !isActuallyHost) {
+        console.warn("[lobby] User tried to access host mode but is not the host");
+        onBack();
+        return;
+      }
+      
+      setIsHost(isActuallyHost);
       if (room.started) onStarted(code);
     };
 
     // initial sync
     handleUpdate();
 
-  const unsub = onRoomsUpdate((rooms) => handleUpdate(rooms));
-
-    // small timeout to cover eventual consistency
-    const t = setTimeout(() => handleUpdate(), 50);
+    const unsub = onRoomsUpdate((rooms) => handleUpdate(rooms));
 
     return () => {
-      clearTimeout(t);
       unsub && unsub();
       // leave the room on unmount only if we had joined
       if (code && joinedRef.current) leaveRoom(code, playerId);
     };
-    // intentionally include these deps so the effect re-runs if code changes
-  }, [code, onBack, onStarted, playerId]);
+    // Only depend on code and playerId, not onBack/onStarted to prevent re-subscriptions
+  }, [code, playerId]);
 
   const otherPlayers = players.filter((p) => p.id !== playerId);
 
@@ -159,6 +194,8 @@ export default function Lobby({ nickname, mode, onStarted, onBack }: Props) {
       return;
     }
     startGame(code);
+    // Update URL to reflect game has started
+    window.history.replaceState(null, '', `/game/${code}?playerId=${playerId}`);
     onStarted(code);
   }
 
@@ -170,7 +207,50 @@ export default function Lobby({ nickname, mode, onStarted, onBack }: Props) {
         </div>
         <div style={{ textAlign: "center" }}>
           <h2 style={{ margin: 0 }}>Lobby</h2>
-          <div style={{ fontSize: 13, color: "var(--muted)" }}>Room: <strong>{code}</strong></div>
+          <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8 }}>Room Code:</div>
+          <div style={{ 
+            fontSize: 24, 
+            fontWeight: 700, 
+            color: "var(--foreground)",
+            background: "var(--accent-100)",
+            padding: "8px 16px",
+            borderRadius: 8,
+            display: "inline-block",
+            marginBottom: 8
+          }}>
+            {code}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>
+            Share this code with other players
+          </div>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(code || '');
+              // Show feedback
+              const btn = document.querySelector('[data-copy-btn]') as HTMLButtonElement;
+              if (btn) {
+                const originalText = btn.textContent;
+                btn.textContent = 'Copied!';
+                btn.style.background = '#10b981';
+                setTimeout(() => {
+                  btn.textContent = originalText;
+                  btn.style.background = '';
+                }, 2000);
+              }
+            }}
+            data-copy-btn
+            style={{
+              padding: "4px 8px",
+              fontSize: 12,
+              background: "var(--accent-200)",
+              color: "var(--foreground)",
+              border: "1px solid var(--accent-300)",
+              borderRadius: 4,
+              cursor: "pointer"
+            }}
+          >
+            Copy Code
+          </button>
         </div>
         <div style={{ width: 80 }} />
       </header>
@@ -203,9 +283,25 @@ export default function Lobby({ nickname, mode, onStarted, onBack }: Props) {
             </div>
 
             <div style={{ marginTop: 12 }}>
-              <button onClick={handleToggleReady} style={{ padding: "8px 10px", width: "100%", borderRadius: 8, background: ready ? "#10b981" : "#0a5b41" }}>
+              <button 
+                onClick={handleToggleReady} 
+                disabled={!code}
+                style={{ 
+                  padding: "8px 10px", 
+                  width: "100%", 
+                  borderRadius: 8, 
+                  background: ready ? "#10b981" : "#0a5b41",
+                  opacity: !code ? 0.5 : 1,
+                  cursor: !code ? "not-allowed" : "pointer"
+                }}
+              >
                 {ready ? "Ready — Cancel" : "Mark as ready"}
               </button>
+              {!code && (
+                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4, textAlign: "center" }}>
+                  Joining room...
+                </div>
+              )}
             </div>
 
             {isHost && (
