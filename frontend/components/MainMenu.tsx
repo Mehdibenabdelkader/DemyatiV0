@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 
 type Props = {
-  onHost: (nickname: string) => void;
-  onJoin: (nickname: string) => void;
+  onHost?: (nickname: string) => void;
+  onJoin?: (nickname: string) => void;
 };
 
 export default function MainMenu({ onHost, onJoin }: Props) {
+  const router = useRouter();
   const [nickname, setNickname] = useState("");
   const [touched, setTouched] = useState(false);
 
@@ -16,13 +18,35 @@ export default function MainMenu({ onHost, onJoin }: Props) {
   const handleHost = () => {
     setTouched(true);
     if (!valid) return;
-    onHost(nickname.trim());
+    
+    if (onHost) {
+      onHost(nickname.trim());
+      return;
+    }
+
+    // Store nickname and navigate to a temporary room creation URL
+    sessionStorage.setItem('demyati_nickname', nickname.trim());
+    router.push(`/game/create?nickname=${encodeURIComponent(nickname.trim())}`);
   };
 
   const handleJoin = () => {
     setTouched(true);
     if (!valid) return;
-    onJoin(nickname.trim());
+    
+    if (onJoin) {
+      onJoin(nickname.trim());
+      return;
+    }
+
+    // Store nickname and generate player ID
+    sessionStorage.setItem('demyati_nickname', nickname.trim());
+    const playerId = Math.random().toString(36).slice(2, 9);
+    sessionStorage.setItem('demyati_player_id', playerId);
+    
+    const roomCode = window.prompt("Enter room code to join:");
+    if (roomCode) {
+      router.push(`/game/${roomCode}?playerId=${playerId}`);
+    }
   };
 
   return (
