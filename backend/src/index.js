@@ -39,6 +39,7 @@ app.post('/rooms', (req, res) => {
   const hostWithTile = Object.assign({ tile: 1 }, host);
   const room = { code, players: [hostWithTile], started: false, hostId: host.id };
   rooms[code] = room;
+  console.log(`[backend] Created room ${code} for host ${host.name} (${host.id})`);
   io.emit('rooms:update', rooms);
   res.status(201).json(room);
 });
@@ -57,6 +58,7 @@ io.on('connection', (socket) => {
     const hostWithTile = Object.assign({ tile: 1 }, host);
     const room = { code, players: [hostWithTile], started: false, hostId: host.id };
     rooms[code] = room;
+    console.log(`[backend] Socket created room ${code} for host ${host.name} (${host.id})`);
     io.emit('rooms:update', rooms);
     if (typeof cb === 'function') cb(null, room);
   });
