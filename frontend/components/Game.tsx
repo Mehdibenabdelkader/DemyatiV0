@@ -1,9 +1,36 @@
+/**
+ * GAME COMPONENT
+ * 
+ * This is the main game component that handles both the lobby and gameplay states.
+ * It manages the game state, player synchronization, and renders the appropriate
+ * interface based on whether the game has started or not.
+ * 
+ * The component handles:
+ * - Room state synchronization via WebSocket
+ * - Player list management and updates
+ * - Game board rendering with player positions
+ * - Dice rolling and player movement
+ * - Transition between lobby and game states
+ * 
+ * The game uses a 200-tile board where players move based on dice rolls.
+ * Prime-numbered tiles are highlighted to add visual interest.
+ */
+
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 import Lobby from "./Lobby";
 import { getRoom, onRoomsUpdate, updatePlayer } from "../lib/rooms";
 
+/**
+ * Props interface for the Game component
+ * 
+ * @property roomCode - The 4-digit room code for the game
+ * @property nickname - The player's nickname
+ * @property mode - Whether the player is hosting or joining
+ * @property started - Whether the game has started
+ * @property onBack - Callback function to return to main menu
+ */
 type Props = {
   roomCode?: string;
   nickname?: string;
@@ -12,13 +39,33 @@ type Props = {
   onBack: () => void;
 };
 
+/**
+ * Game Component
+ * 
+ * The main game component that manages the game state and renders
+ * either the lobby interface or the game board based on the game state.
+ * 
+ * @param propRoomCode - The room code from props
+ * @param nickname - The player's nickname
+ * @param mode - Whether the player is hosting or joining
+ * @param propStarted - Whether the game has started
+ * @param onBack - Callback to return to main menu
+ * @returns JSX element containing the game interface
+ */
 export default function Game({ roomCode: propRoomCode, nickname, mode, started: propStarted, onBack }: Props) {
+  // Game state management
   const [started, setStarted] = useState(propStarted || false);
   const [roomCode, setRoomCode] = useState<string | null>(propRoomCode || null);
   const [players, setPlayers] = useState<Array<{ id: string; name: string; color: string; ready: boolean; tile?: number }>>([]);
   const [lastRoll, setLastRoll] = useState<number | null>(null);
 
-  // utility: primes up to 200
+  /**
+   * Prime Numbers Calculation
+   * 
+   * Pre-calculates prime numbers up to 200 for highlighting special tiles.
+   * This is memoized to avoid recalculating on every render.
+   * Prime tiles are highlighted with a different background color.
+   */
   const primes = useMemo(() => {
     const max = 200;
     const isPrime = Array(max + 1).fill(true);
@@ -31,7 +78,15 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
     return isPrime;
   }, []);
 
-  // helper to load players from room
+  /**
+   * Sync Room Data
+   * 
+   * Fetches the current room data from the backend and updates
+   * the local players state. This is used to keep the game
+   * synchronized with the server state.
+   * 
+   * @param code - The room code to sync
+   */
   function syncRoom(code: string | null) {
     if (!code) return;
     (async () => {
@@ -43,6 +98,12 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
     })();
   }
 
+  /**
+   * Effect hook for room synchronization
+   * 
+   * Sets up real-time synchronization with the room data.
+   * Subscribes to room updates via WebSocket and syncs the local state.
+   */
   useEffect(() => {
     if (!roomCode) return;
     syncRoom(roomCode);

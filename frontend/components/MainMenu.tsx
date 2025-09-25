@@ -1,20 +1,62 @@
+/**
+ * MAIN MENU COMPONENT
+ * 
+ * This is the primary entry point for the Demyati game application.
+ * It provides the initial user interface where players can enter their
+ * nickname and choose to either host a new room or join an existing one.
+ * 
+ * The component handles:
+ * - Nickname input validation
+ * - Navigation to room creation or joining flows
+ * - Session storage management for player data
+ * - User-friendly error states and feedback
+ * 
+ * The component is designed to be reusable and can accept custom
+ * handlers for hosting and joining if needed.
+ */
+
 "use client";
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 
+/**
+ * Props interface for the MainMenu component
+ * 
+ * @property onHost - Optional callback for hosting a room (overrides default behavior)
+ * @property onJoin - Optional callback for joining a room (overrides default behavior)
+ */
 type Props = {
   onHost?: (nickname: string) => void;
   onJoin?: (nickname: string) => void;
 };
 
+/**
+ * MainMenu Component
+ * 
+ * The main menu component that provides the initial user interface
+ * for the Demyati game. Players can enter their nickname and choose
+ * to host or join a game room.
+ * 
+ * @param onHost - Optional callback for hosting a room
+ * @param onJoin - Optional callback for joining a room
+ * @returns JSX element containing the main menu interface
+ */
 export default function MainMenu({ onHost, onJoin }: Props) {
   const router = useRouter();
   const [nickname, setNickname] = useState("");
   const [touched, setTouched] = useState(false);
 
+  // Validation state for nickname input
   const valid = nickname.trim().length > 0;
 
+  /**
+   * Handle Host Button Click
+   * 
+   * Handles the "Host a room" button click. If custom onHost handler
+   * is provided, it calls that. Otherwise, it stores the nickname
+   * and navigates to the room creation page.
+   */
   const handleHost = () => {
     setTouched(true);
     if (!valid) return;
@@ -24,11 +66,19 @@ export default function MainMenu({ onHost, onJoin }: Props) {
       return;
     }
 
-    // Store nickname and navigate to a temporary room creation URL
+    // Store nickname and navigate to room creation page
     sessionStorage.setItem('demyati_nickname', nickname.trim());
     router.push(`/game/create?nickname=${encodeURIComponent(nickname.trim())}`);
   };
 
+  /**
+   * Handle Join Button Click
+   * 
+   * Handles the "Join a room" button click. If custom onJoin handler
+   * is provided, it calls that. Otherwise, it stores the nickname,
+   * generates a player ID, prompts for room code, and navigates to
+   * the game room page.
+   */
   const handleJoin = () => {
     setTouched(true);
     if (!valid) return;
@@ -43,12 +93,19 @@ export default function MainMenu({ onHost, onJoin }: Props) {
     const playerId = Math.random().toString(36).slice(2, 9);
     sessionStorage.setItem('demyati_player_id', playerId);
     
+    // Prompt user for room code
     const roomCode = window.prompt("Enter room code to join:");
     if (roomCode) {
       router.push(`/game/${roomCode}?playerId=${playerId}`);
     }
   };
 
+  /**
+   * Render the main menu interface
+   * 
+   * Returns the complete main menu UI with title, nickname input,
+   * and action buttons for hosting or joining rooms.
+   */
   return (
     <main style={{
       minHeight: "100vh",
@@ -62,11 +119,12 @@ export default function MainMenu({ onHost, onJoin }: Props) {
       color: "var(--foreground)",
     }}>
       <div style={{ width: 480, maxWidth: "100%", textAlign: "center" }}>
-        {/* Title image from public folder */}
+        {/* Game title image */}
         <div style={{ marginBottom: 24 }} aria-hidden>
           <img src="/GameTitleImg.svg" alt="Demyati" style={{ width: "100%", height: 220, objectFit: "contain" }} />
         </div>
 
+        {/* Nickname input section */}
         <div style={{ marginBottom: 12, textAlign: "left" }}>
           <label htmlFor="nickname" style={{ display: "block", marginBottom: 6, fontWeight: 600 }}>Nickname</label>
           <input
@@ -83,12 +141,15 @@ export default function MainMenu({ onHost, onJoin }: Props) {
               border: touched && !valid ? "2px solid #ef4444" : "1px solid var(--accent-100)",
             }}
           />
+          {/* Validation error message */}
           {touched && !valid ? (
             <div style={{ color: "#ef4444", marginTop: 8, fontSize: 13 }}>Nickname can&apos;t be empty.</div>
           ) : null}
         </div>
 
+        {/* Action buttons */}
         <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 18 }}>
+          {/* Host a room button */}
           <button
             onClick={handleHost}
             className="accent-btn"
@@ -110,6 +171,7 @@ export default function MainMenu({ onHost, onJoin }: Props) {
             Host a room
           </button>
 
+          {/* Join a room button */}
           <button
             onClick={handleJoin}
             style={{
