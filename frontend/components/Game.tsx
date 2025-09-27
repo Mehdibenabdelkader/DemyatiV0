@@ -58,6 +58,7 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
   const [roomCode, setRoomCode] = useState<string | null>(propRoomCode || null);
   const [players, setPlayers] = useState<Array<{ id: string; name: string; color: string; ready: boolean; tile?: number }>>([]);
   const [lastRoll, setLastRoll] = useState<number | null>(null);
+  const [screenWidth, setScreenWidth] = useState<number>(0);
 
   /**
    * Prime Numbers Calculation
@@ -77,6 +78,28 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
     }
     return isPrime;
   }, []);
+
+  /**
+   * Calculate optimal number of columns for the game board
+   * 
+   * Determines the best number of columns based on screen width to ensure
+   * the board fits well on different screen sizes while maintaining readability.
+   */
+  const calculateColumns = useMemo(() => {
+    if (screenWidth === 0) return 10; // Default fallback
+    
+    // Calculate available width for the board (accounting for padding, sidebar, etc.)
+    const availableWidth = Math.min(screenWidth - 100, window.innerWidth - 300); // Account for sidebar and padding
+    const minTileWidth = 60; // Minimum tile width for readability
+    const maxColumns = Math.floor(availableWidth / minTileWidth);
+    
+    // Ensure we have at least 5 columns and at most 20 columns
+    const columns = Math.max(5, Math.min(20, maxColumns));
+    
+    // Make sure 200 tiles can be evenly distributed
+    const rows = Math.ceil(200 / columns);
+    return columns;
+  }, [screenWidth]);
 
   /**
    * Sync Room Data
@@ -110,6 +133,24 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
     const unsub = onRoomsUpdate(() => syncRoom(roomCode));
     return () => unsub && unsub();
   }, [roomCode]);
+
+  /**
+   * Effect hook for screen width tracking
+   * 
+   * Tracks window resize events to recalculate the optimal number of columns
+   * for the game board layout.
+   */
+  useEffect(() => {
+    const handleResize = () => {
+      setScreenWidth(window.innerWidth);
+    };
+
+    // Set initial width
+    handleResize();
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   if (!started) {
     // If we have a roomCode from URL but no nickname/mode, we need to get player info
@@ -223,20 +264,49 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
         <div style={{ width: 80 }} />
       </header>
 
-      <main style={{ marginTop: 18, display: "grid", gridTemplateColumns: "1fr 240px", gap: 18 }}>
-        <section style={{ padding: 12, border: "1px solid var(--accent-100)", borderRadius: 8 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(10, 1fr)", gap: 6 }}>
+      <main style={{ 
+        marginTop: 18, 
+        display: "grid", 
+        gridTemplateColumns: screenWidth < 768 ? "1fr" : "1fr 240px", 
+        gap: 18 
+      }}>
+        <section style={{ padding: 12, border: "1px solid var(--accent-100)", borderRadius: 8, overflow: "auto" }}>
+          <div style={{ 
+            display: "grid", 
+            gridTemplateColumns: `repeat(${calculateColumns}, 1fr)`, 
+            gap: 6,
+            minWidth: "100%"
+          }}>
             {Array.from({ length: 200 }).map((_, i) => {
               const n = i + 1;
               const prime = primes[n];
               // collect pawns on this tile
               const pawns = players.filter((p) => (p.tile || 1) === n);
               return (
-                <div key={n} style={{ position: "relative", padding: 8, borderRadius: 6, background: prime ? "#fde68a" : "#ffffff11", border: "1px solid #00000010", minHeight: 52 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700 }}>{n}</div>
-                  <div style={{ position: "absolute", right: 6, bottom: 6, display: "flex", gap: 4 }}>
+                <div key={n} style={{ 
+                  position: "relative", 
+                  padding: 6, 
+                  borderRadius: 6, 
+                  background: prime ? "#fde68a" : "#ffffff11", 
+                  border: "1px solid #00000010", 
+                  minHeight: 48,
+                  aspectRatio: "1",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between"
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, lineHeight: 1 }}>{n}</div>
+                  <div style={{ display: "flex", gap: 2, flexWrap: "wrap", justifyContent: "flex-end" }}>
                     {pawns.map((p) => (
-                      <div key={p.id} title={p.name} style={{ width: 18, height: 18, borderRadius: 4, background: p.color, border: "2px solid white", boxShadow: "0 1px 0 rgba(0,0,0,0.3)" }} />
+                      <div key={p.id} title={p.name} style={{ 
+                        width: 14, 
+                        height: 14, 
+                        borderRadius: 3, 
+                        background: p.color, 
+                        border: "1px solid white", 
+                        boxShadow: "0 1px 0 rgba(0,0,0,0.3)",
+                        flexShrink: 0
+                      }} />
                     ))}
                   </div>
                 </div>
@@ -245,7 +315,12 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
           </div>
         </section>
 
-        <aside style={{ padding: 12, border: "1px solid var(--accent-100)", borderRadius: 8 }}>
+        <aside style={{ 
+          padding: 12, 
+          border: "1px solid var(--accent-100)", 
+          borderRadius: 8,
+          order: screenWidth < 768 ? 2 : 1
+        }}>
           <h3 style={{ marginTop: 0 }}>Controls</h3>
           <div style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
