@@ -20,6 +20,8 @@ type Room = {
   players: Player[];
   started: boolean;
   hostId?: string;
+  currentPlayerIndex?: number;
+  turnOrder?: string[];
 };
 
 const BACKEND_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
@@ -178,6 +180,25 @@ export function startGame(code: string) {
   } catch (e) {
     // ignore
   }
+}
+
+export function rollDice(code: string, playerId: string): Promise<{ diceRoll: number; newPosition: number; nextPlayerId: string }> {
+  return new Promise((resolve, reject) => {
+    try {
+      const s = ensureSocket();
+      s.emit("rooms:rollDice", code, playerId, (error: any, result?: { diceRoll: number; newPosition: number; nextPlayerId: string }) => {
+        if (error) {
+          reject(new Error(error));
+        } else if (result) {
+          resolve(result);
+        } else {
+          reject(new Error("No result received"));
+        }
+      });
+    } catch (e) {
+      reject(e);
+    }
+  });
 }
 
 export function onRoomsUpdate(cb: (rooms?: Record<string, Room>) => void) {

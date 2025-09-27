@@ -142,13 +142,15 @@ app.post(HTTP_ENDPOINTS.ROOMS, (req: Request, res: Response) => {
     code, 
     players: [hostWithTile], 
     started: false, 
-    hostId: host.id 
+    hostId: host.id,
+    currentPlayerIndex: 0,
+    turnOrder: [host.id]
   };
   
   // Store room and broadcast update
   rooms[code] = room;
-  console.log(`[backend] Created room ${code} for host ${host.name} (${host.id})`);
-  console.log(`[backend] Total rooms after creation:`, Object.keys(rooms).length);
+  console.log(`[backend] HTTP API: Created room ${code} for host ${host.name} (${host.id})`);
+  console.log(`[backend] HTTP API: Total rooms after creation:`, Object.keys(rooms).length);
   io.emit(SOCKET_EVENTS.ROOMS_UPDATE, rooms);
   res.status(201).json(room);
 });
@@ -208,7 +210,9 @@ io.on('connection', (socket) => {
       code, 
       players: [hostWithTile], 
       started: false, 
-      hostId: host.id 
+      hostId: host.id,
+      currentPlayerIndex: 0,
+      turnOrder: [host.id]
     };
     
     // Store room and broadcast to all clients
@@ -217,7 +221,8 @@ io.on('connection', (socket) => {
     // Track host connection
     playerConnections[socket.id] = { roomCode: code, playerId: host.id };
     
-    console.log(`[backend] Socket created room ${code} for host ${host.name} (${host.id})`);
+    console.log(`[backend] SOCKET: Created room ${code} for host ${host.name} (${host.id})`);
+    console.log(`[backend] SOCKET: Total rooms after creation:`, Object.keys(rooms).length);
     io.emit(SOCKET_EVENTS.ROOMS_UPDATE, rooms);
     if (typeof cb === 'function') cb(null, room);
   });
@@ -260,6 +265,14 @@ io.on('connection', (socket) => {
     // Add new player with starting position
     const sanitizedPlayer = sanitizePlayer(player);
     room.players.push({ ...sanitizedPlayer, tile: 1 });
+    
+    // Add player to turn order if not already present
+    if (!room.turnOrder) {
+      room.turnOrder = room.players.map(p => p.id);
+    } else if (!room.turnOrder.includes(player.id)) {
+      room.turnOrder.push(player.id);
+    }
+    
     rooms[code] = room;
     
     // Track player connection
@@ -317,6 +330,28 @@ io.on('connection', (socket) => {
     
     // Remove player from room
     room.players = room.players.filter((p) => p.id !== playerId);
+    
+    // Remove player from turn order and adjust current player index
+    if (room.turnOrder) {
+      const playerIndex = room.turnOrder.indexOf(playerId);
+      if (playerIndex !== -1) {
+        room.turnOrder.splice(playerIndex, 1);
+        
+        // Adjust current player index if necessary
+        if (room.currentPlayerIndex !== undefined) {
+          if (playerIndex < room.currentPlayerIndex) {
+            room.currentPlayerIndex = Math.max(0, room.currentPlayerIndex - 1);
+          } else if (playerIndex === room.currentPlayerIndex) {
+            // If it was the current player's turn, move to next player
+            if (room.turnOrder.length > 0) {
+              room.currentPlayerIndex = room.currentPlayerIndex % room.turnOrder.length;
+            } else {
+              room.currentPlayerIndex = 0;
+            }
+          }
+        }
+      }
+    }
     
     // Clean up connection tracking
     delete playerConnections[socket.id];
@@ -400,6 +435,78 @@ io.on('connection', (socket) => {
     rooms[code] = room;
     io.emit(SOCKET_EVENTS.ROOMS_UPDATE, rooms);
     if (typeof cb === 'function') cb(null, room);
+  });
+
+  /**
+   * Handle rooms:rollDice event
+   * 
+   * Handles dice rolling for the current player in a turn-based manner.
+   * Only the player whose turn it is can roll the dice.
+   * 
+   * Process:
+   * 1. Validate room exists and game has started
+   * 2. Check if it's the requesting player's turn
+   * 3. Roll dice (2-12)
+   * 4. Move player's piece
+   * 5. Advance to next player's turn
+   * 6. Broadcast update to all clients
+   * 
+   * @param code - 4-digit room code
+   * @param playerId - ID of the player requesting to roll dice
+   * @param cb - Callback function to send response back to client
+   */
+  socket.on(SOCKET_EVENTS.ROOMS_ROLL_DICE, (code: string, playerId: string, cb) => {
+    const room = rooms[code];
+    if (!room) return cb && cb({ error: 'room not found' });
+    
+    if (!room.started) return cb && cb({ error: 'game not started' });
+    
+    if (!room.turnOrder || room.turnOrder.length === 0) {
+      return cb && cb({ error: 'no players in turn order' });
+    }
+    
+    if (room.currentPlayerIndex === undefined) {
+      room.currentPlayerIndex = 0;
+    }
+    
+    const currentPlayerId = room.turnOrder[room.currentPlayerIndex];
+    if (currentPlayerId !== playerId) {
+      return cb && cb({ error: 'not your turn' });
+    }
+    
+    // Find the current player
+    const currentPlayer = room.players.find(p => p.id === playerId);
+    if (!currentPlayer) {
+      return cb && cb({ error: 'player not found' });
+    }
+    
+    // Roll dice (2-12)
+    const diceRoll = 2 + Math.floor(Math.random() * 11);
+    
+    // Move player
+    const currentTile = currentPlayer.tile || 1;
+    const newPosition = Math.min(200, currentTile + diceRoll);
+    currentPlayer.tile = newPosition;
+    
+    // Move to next player's turn
+    room.currentPlayerIndex = (room.currentPlayerIndex + 1) % room.turnOrder.length;
+    const nextPlayerId = room.turnOrder[room.currentPlayerIndex];
+    
+    // Update room
+    rooms[code] = room;
+    
+    // Broadcast update to all clients
+    io.emit(SOCKET_EVENTS.ROOMS_UPDATE, rooms);
+    
+    console.log(`[backend] Player ${currentPlayer.name} rolled ${diceRoll}, moved to tile ${newPosition}, next turn: ${nextPlayerId}`);
+    
+    if (typeof cb === 'function') {
+      cb(null, { 
+        diceRoll, 
+        newPosition, 
+        nextPlayerId 
+      });
+    }
   });
 
   /**

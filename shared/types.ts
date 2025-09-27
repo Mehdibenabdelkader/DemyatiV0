@@ -42,12 +42,16 @@ export interface Player {
  * @property players - Array of all players currently in the room
  * @property started - Boolean indicating if the game has begun
  * @property hostId - ID of the player who created the room (has special privileges)
+ * @property currentPlayerIndex - Index of the player whose turn it is (0-based)
+ * @property turnOrder - Array of player IDs in turn order
  */
 export interface Room {
   code: string;
   players: Player[];
   started: boolean;
   hostId?: string;
+  currentPlayerIndex?: number;
+  turnOrder?: string[];
 }
 
 /**
@@ -133,6 +137,7 @@ export interface SocketEvents {
   'rooms:leave': (code: string, playerId: string, callback: (error: any, result?: { ok: boolean }) => void) => void;
   'rooms:updatePlayer': (code: string, player: Player, callback: (error: any, room?: Room) => void) => void;
   'rooms:start': (code: string, callback: (error: any, room?: Room) => void) => void;
+  'rooms:rollDice': (code: string, playerId: string, callback: (error: any, result?: { diceRoll: number; newPosition: number; nextPlayerId: string }) => void) => void;
   'rooms:update': (rooms: Record<string, Room>) => void;
   'player:joined': (data: { playerName: string; roomCode: string }) => void;
   'player:left': (data: { playerName: string; roomCode: string }) => void;

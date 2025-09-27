@@ -45,24 +45,29 @@ export default function Lobby({ nickname, mode, roomCode: propRoomCode, onStarte
   const [isHost, setIsHost] = useState(false);
   const [messages, setMessages] = useState<Array<{ id: string; type: 'joined' | 'left'; playerName: string; timestamp: number }>>([]);
   const joinedRef = useRef(false);
+  const gameStartedRef = useRef(false);
 
   useEffect(() => {
     // on mount: create or join
     const p: PlayerView = { id: playerId, name: nickname, color, ready: false };
+    
+    console.log("[lobby] useEffect triggered - mode:", mode, "code:", code, "propRoomCode:", propRoomCode, "playerId:", playerId);
+    
+    // Check if we have a propRoomCode but local code state is not set yet
+    // This can happen during initial render when props are passed but state hasn't updated
+    if (propRoomCode && !code) {
+      console.log("[lobby] Setting code from props:", propRoomCode);
+      setCode(propRoomCode);
+      return; // Exit early, let the next effect run handle the room setup
+    }
+    
     if (mode === "host" && !code) {
-      // Only create room if we don't already have a code (shouldn't happen with new flow)
-      (async () => {
-        try {
-          const c = await createRoom({ ...p, isHost: true });
-          setCode(c);
-          setIsHost(true);
-          joinedRef.current = true;
-          console.log("[lobby] created room", c, "hostId", playerId, "nickname", nickname);
-        } catch (_e) {
-          console.error("createRoom failed", _e);
-          onBack();
-        }
-      })();
+      // In the new flow, hosts should always have a room code passed as props
+      // If we don't have a code, something went wrong
+      console.error("[lobby] ERROR: Host mode but no room code provided!");
+      console.log("[lobby] mode:", mode, "code:", code, "propRoomCode:", propRoomCode);
+      onBack();
+      return;
     } else if (mode === "host" && code) {
       // If we already have a code, just set up the host state
       setIsHost(true);
@@ -156,7 +161,10 @@ export default function Lobby({ nickname, mode, roomCode: propRoomCode, onStarte
       }
       
       setIsHost(isActuallyHost);
-      if (room.started) onStarted(code);
+      if (room.started) {
+        gameStartedRef.current = true;
+        onStarted(code);
+      }
     };
 
     // initial sync
@@ -166,11 +174,14 @@ export default function Lobby({ nickname, mode, roomCode: propRoomCode, onStarte
 
     return () => {
       unsub && unsub();
-      // leave the room on unmount only if we had joined
-      if (code && joinedRef.current) leaveRoom(code, playerId);
+      // leave the room on unmount only if we had joined AND the game hasn't started
+      // This prevents the host from leaving when transitioning to game state
+      if (code && joinedRef.current && !gameStartedRef.current) {
+        leaveRoom(code, playerId);
+      }
     };
-    // Only depend on code and playerId, not onBack/onStarted to prevent re-subscriptions
-  }, [code, playerId]);
+    // Only depend on code, playerId, and propRoomCode, not onBack/onStarted to prevent re-subscriptions
+  }, [code, playerId, propRoomCode]);
 
   // Subscribe to player join/leave messages
   useEffect(() => {
@@ -220,6 +231,7 @@ export default function Lobby({ nickname, mode, roomCode: propRoomCode, onStarte
       window.alert("Can't start: need at least 2 players and everyone must be ready.");
       return;
     }
+    gameStartedRef.current = true;
     startGame(code);
     // Update URL to reflect game has started
     window.history.replaceState(null, '', `/game/${code}?playerId=${playerId}`);

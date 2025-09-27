@@ -64,6 +64,7 @@ export default function CreateRoomPage() {
         sessionStorage.setItem('demyati_player_id', playerId);
 
         // Create room with host player data
+        console.log("[create-room] Creating room for host:", { playerId, nickname });
         const roomCode = await createRoom({
           id: playerId,
           name: nickname,
@@ -71,6 +72,7 @@ export default function CreateRoomPage() {
           ready: false,
           isHost: true
         });
+        console.log("[create-room] Created room with code:", roomCode);
 
         // Redirect to the game room page with the room code and player ID
         router.replace(`/game/${roomCode}?playerId=${playerId}`);

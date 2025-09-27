@@ -20,7 +20,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Lobby from "./Lobby";
-import { getRoom, onRoomsUpdate, updatePlayer, onPlayerMessage } from "../lib/rooms";
+import { getRoom, onRoomsUpdate, updatePlayer, onPlayerMessage, rollDice } from "../lib/rooms";
 
 /**
  * Props interface for the Game component
@@ -60,6 +60,8 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
   const [lastRoll, setLastRoll] = useState<number | null>(null);
   const [screenWidth, setScreenWidth] = useState<number>(0);
   const [messages, setMessages] = useState<Array<{ id: string; type: 'joined' | 'left'; playerName: string; timestamp: number }>>([]);
+  const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
+  const [isMyTurn, setIsMyTurn] = useState<boolean>(false);
 
   /**
    * Prime Numbers Calculation
@@ -119,6 +121,16 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
       type RoomPlayer = { id: string; name: string; color: string; ready: boolean; tile?: number };
       const rp = (room.players as RoomPlayer[]);
       setPlayers(rp.map((p) => ({ id: p.id, name: p.name, color: p.color, ready: p.ready, tile: p.tile || 1 })));
+      
+      // Update turn information
+      if (room.turnOrder && room.currentPlayerIndex !== undefined) {
+        const currentId = room.turnOrder[room.currentPlayerIndex];
+        setCurrentPlayerId(currentId);
+        
+        // Check if it's the current player's turn
+        const myPlayerId = sessionStorage.getItem("demyati_player_id") || localStorage.getItem("demyati_player_id");
+        setIsMyTurn(currentId === myPlayerId);
+      }
     })();
   }
 
@@ -387,35 +399,33 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
           <h3 style={{ marginTop: 0 }}>Controls</h3>
           <div style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button onClick={() => {
-                // simulate two dice (2-12)
-                const a = 1 + Math.floor(Math.random() * 6);
-                const b = 1 + Math.floor(Math.random() * 6);
-                const total = a + b;
-                setLastRoll(total);
-                // move current player's pawn (if present)
-                (async () => {
+              <button 
+                onClick={async () => {
+                  if (!isMyTurn || !roomCode) return;
+                  
                   try {
-                    // prefer sessionStorage (per-tab) then fallback to localStorage
-                    const pid = sessionStorage.getItem("demyati_player_id") || localStorage.getItem("demyati_player_id");
-                    if (pid && roomCode) {
-                      const room = await getRoom(roomCode);
-                      if (room) {
-                        type RoomPlayer = { id: string; name: string; color: string; ready: boolean; tile?: number };
-                        const rp = room.players as RoomPlayer[];
-                        const player = rp.find((x) => x.id === pid);
-                        if (player) {
-                          const newTile = Math.min(200, (player.tile || 1) + total);
-                          updatePlayer(roomCode, { ...player, tile: newTile });
-                        }
-                      }
-                    }
-                  } catch (_e) {
-                    // ignore
+                    const myPlayerId = sessionStorage.getItem("demyati_player_id") || localStorage.getItem("demyati_player_id");
+                    if (!myPlayerId) return;
+                    
+                    const result = await rollDice(roomCode, myPlayerId);
+                    setLastRoll(result.diceRoll);
+                  } catch (error) {
+                    console.error("Failed to roll dice:", error);
+                    alert(error instanceof Error ? error.message : "Failed to roll dice");
                   }
-                })();
-              }} style={{ padding: "10px 12px", borderRadius: 8 }}>
-                Roll dice
+                }} 
+                disabled={!isMyTurn}
+                style={{ 
+                  padding: "10px 12px", 
+                  borderRadius: 8,
+                  background: isMyTurn ? "linear-gradient(to bottom, #FCC877 0%, #967747 100%)" : "#666",
+                  color: isMyTurn ? "#15362C" : "#999",
+                  cursor: isMyTurn ? "pointer" : "not-allowed",
+                  border: "none",
+                  fontWeight: 600
+                }}
+              >
+                {isMyTurn ? "Roll dice" : `Waiting for ${players.find(p => p.id === currentPlayerId)?.name || "player"}...`}
               </button>
               <div style={{ fontSize: 14, color: "var(--muted)" }}>Last roll: <strong>{lastRoll ?? "-"}</strong></div>
             </div>
@@ -424,20 +434,38 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
           <div style={{ marginBottom: 12 }}>
             <h4 style={{ margin: "6px 0" }}>Players</h4>
             <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-              {players.map((p) => (
-                <li key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0" }}>
-                  <div style={{ width: 28, height: 20, borderRadius: 6, background: p.color }} aria-hidden />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700 }}>{p.name}</div>
-                    <div style={{ fontSize: 12, color: "var(--muted)" }}>Tile: <strong>{p.tile || 1}</strong></div>
-                  </div>
-                </li>
-              ))}
+              {players.map((p) => {
+                const isCurrentPlayer = currentPlayerId === p.id;
+                return (
+                  <li key={p.id} style={{ 
+                    display: "flex", 
+                    alignItems: "center", 
+                    gap: 8, 
+                    padding: "6px 0",
+                    background: isCurrentPlayer ? "rgba(252, 200, 119, 0.2)" : "transparent",
+                    borderRadius: 6,
+                    border: isCurrentPlayer ? "1px solid #FCC877" : "1px solid transparent"
+                  }}>
+                    <div style={{ width: 28, height: 20, borderRadius: 6, background: p.color }} aria-hidden />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+                        {p.name}
+                        {isCurrentPlayer && <span style={{ fontSize: 12, color: "#FCC877", fontWeight: 600 }}>🎯 TURN</span>}
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--muted)" }}>Tile: <strong>{p.tile || 1}</strong></div>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </div>
 
           <div>
-            <div style={{ fontSize: 12, color: "var(--muted)" }}>Note: click &quot;Roll dice&quot; to move your pawn. Dice roll is 2-12.</div>
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>
+              {isMyTurn ? "It's your turn! Click 'Roll dice' to move your pawn." : "Wait for your turn to roll the dice."}
+              <br />
+              Dice roll is 2-12.
+            </div>
           </div>
         </aside>
       </main>
