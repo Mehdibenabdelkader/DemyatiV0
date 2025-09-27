@@ -20,6 +20,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Lobby from "./Lobby";
+import DiceAnimation from "./DiceAnimation";
 import { getRoom, onRoomsUpdate, updatePlayer, onPlayerMessage, rollDice } from "../lib/rooms";
 
 /**
@@ -62,6 +63,8 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
   const [messages, setMessages] = useState<Array<{ id: string; type: 'joined' | 'left'; playerName: string; timestamp: number }>>([]);
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
   const [isMyTurn, setIsMyTurn] = useState<boolean>(false);
+  const [isDiceRolling, setIsDiceRolling] = useState<boolean>(false);
+  const [diceAnimationResult, setDiceAnimationResult] = useState<number | null>(null);
 
   /**
    * Prime Numbers Calculation
@@ -291,6 +294,12 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
       />
     );
   }
+  // Handle dice animation completion
+  const handleDiceAnimationComplete = () => {
+    setIsDiceRolling(false);
+    setDiceAnimationResult(null);
+  };
+
   return (
     <div style={{ padding: 18, minHeight: "100vh", background: "transparent", color: "var(--foreground)" }}>
       {/* Player Connection Messages */}
@@ -323,6 +332,13 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
           ))}
         </div>
       )}
+
+      {/* Dice Animation Overlay */}
+      <DiceAnimation
+        isRolling={isDiceRolling}
+        result={diceAnimationResult}
+        onAnimationComplete={handleDiceAnimationComplete}
+      />
 
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
@@ -401,31 +417,38 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <button 
                 onClick={async () => {
-                  if (!isMyTurn || !roomCode) return;
+                  if (!isMyTurn || !roomCode || isDiceRolling) return;
                   
                   try {
                     const myPlayerId = sessionStorage.getItem("demyati_player_id") || localStorage.getItem("demyati_player_id");
                     if (!myPlayerId) return;
                     
+                    // Start dice animation
+                    setIsDiceRolling(true);
+                    setDiceAnimationResult(null);
+                    
                     const result = await rollDice(roomCode, myPlayerId);
+                    setDiceAnimationResult(result.diceRoll);
                     setLastRoll(result.diceRoll);
                   } catch (error) {
                     console.error("Failed to roll dice:", error);
                     alert(error instanceof Error ? error.message : "Failed to roll dice");
+                    setIsDiceRolling(false);
+                    setDiceAnimationResult(null);
                   }
                 }} 
-                disabled={!isMyTurn}
+                disabled={!isMyTurn || isDiceRolling}
                 style={{ 
                   padding: "10px 12px", 
                   borderRadius: 8,
-                  background: isMyTurn ? "linear-gradient(to bottom, #FCC877 0%, #967747 100%)" : "#666",
-                  color: isMyTurn ? "#15362C" : "#999",
-                  cursor: isMyTurn ? "pointer" : "not-allowed",
+                  background: (isMyTurn && !isDiceRolling) ? "linear-gradient(to bottom, #FCC877 0%, #967747 100%)" : "#666",
+                  color: (isMyTurn && !isDiceRolling) ? "#15362C" : "#999",
+                  cursor: (isMyTurn && !isDiceRolling) ? "pointer" : "not-allowed",
                   border: "none",
                   fontWeight: 600
                 }}
               >
-                {isMyTurn ? "Roll dice" : `Waiting for ${players.find(p => p.id === currentPlayerId)?.name || "player"}...`}
+                {isDiceRolling ? "Rolling..." : (isMyTurn ? "Roll dice" : `Waiting for ${players.find(p => p.id === currentPlayerId)?.name || "player"}...`)}
               </button>
               <div style={{ fontSize: 14, color: "var(--muted)" }}>Last roll: <strong>{lastRoll ?? "-"}</strong></div>
             </div>
