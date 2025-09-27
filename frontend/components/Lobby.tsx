@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createRoom, joinRoom, leaveRoom, updatePlayer, getRoom, startGame, onRoomsUpdate } from "../lib/rooms";
+import { createRoom, joinRoom, leaveRoom, updatePlayer, getRoom, startGame, onRoomsUpdate, onPlayerMessage } from "../lib/rooms";
 function genId() {
   return Math.random().toString(36).slice(2, 9);
 }
@@ -43,6 +43,7 @@ export default function Lobby({ nickname, mode, roomCode: propRoomCode, onStarte
   const [color, setColor] = useState(COLORS[0]);
   const [ready, setReady] = useState(false);
   const [isHost, setIsHost] = useState(false);
+  const [messages, setMessages] = useState<Array<{ id: string; type: 'joined' | 'left'; playerName: string; timestamp: number }>>([]);
   const joinedRef = useRef(false);
 
   useEffect(() => {
@@ -171,6 +172,32 @@ export default function Lobby({ nickname, mode, roomCode: propRoomCode, onStarte
     // Only depend on code and playerId, not onBack/onStarted to prevent re-subscriptions
   }, [code, playerId]);
 
+  // Subscribe to player join/leave messages
+  useEffect(() => {
+    if (!code) return;
+    
+    const unsub = onPlayerMessage((message) => {
+      // Only show messages for the current room
+      if (message.roomCode === code) {
+        const newMessage = {
+          id: `${message.type}-${message.playerName}-${Date.now()}`,
+          type: message.type,
+          playerName: message.playerName,
+          timestamp: Date.now()
+        };
+        
+        setMessages(prev => [...prev, newMessage]);
+        
+        // Auto-remove message after 5 seconds
+        setTimeout(() => {
+          setMessages(prev => prev.filter(msg => msg.id !== newMessage.id));
+        }, 5000);
+      }
+    });
+    
+    return () => unsub && unsub();
+  }, [code]);
+
   const otherPlayers = players.filter((p) => p.id !== playerId);
 
   const canStart = useMemo(() => {
@@ -201,6 +228,37 @@ export default function Lobby({ nickname, mode, roomCode: propRoomCode, onStarte
 
   return (
     <div style={{ padding: 24, minHeight: "100vh", background: "transparent", color: "var(--foreground)" }}>
+      {/* Player Connection Messages */}
+      {messages.length > 0 && (
+        <div style={{
+          position: "fixed",
+          top: 20,
+          right: 20,
+          zIndex: 1000,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8
+        }}>
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 6,
+                background: message.type === 'joined' ? "#10b981" : "#ef4444",
+                color: "white",
+                fontSize: 14,
+                fontWeight: 500,
+                boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+                animation: "slideIn 0.3s ease-out"
+              }}
+            >
+              {message.type === 'joined' ? '🎉' : '👋'} {message.playerName} {message.type === 'joined' ? 'joined' : 'left'} the game
+            </div>
+          ))}
+        </div>
+      )}
+
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <button onClick={onBack} style={{ padding: "6px 10px", borderRadius: 6 }}>Back</button>

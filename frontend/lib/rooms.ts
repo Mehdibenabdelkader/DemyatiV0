@@ -27,6 +27,7 @@ const BACKEND_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:40
 let socket: ReturnType<typeof io> | null = null;
 let lastRooms: Record<string, Room> | null = null;
 const listeners = new Set<(rooms?: Record<string, Room>) => void>();
+const messageListeners = new Set<(message: { type: 'joined' | 'left'; playerName: string; roomCode: string }) => void>();
 
 function ensureSocket() {
   if (socket && socket.connected) return socket;
@@ -51,6 +52,17 @@ function ensureSocket() {
     console.log("[rooms] Received rooms update", Object.keys(rooms).length, "rooms");
     lastRooms = rooms;
     listeners.forEach((cb) => cb(rooms));
+  });
+  
+  // Listen for player join/leave messages
+  socket.on("player:joined", (data: { playerName: string; roomCode: string }) => {
+    console.log("[rooms] Player joined:", data);
+    messageListeners.forEach((cb) => cb({ type: 'joined', ...data }));
+  });
+  
+  socket.on("player:left", (data: { playerName: string; roomCode: string }) => {
+    console.log("[rooms] Player left:", data);
+    messageListeners.forEach((cb) => cb({ type: 'left', ...data }));
   });
   return socket;
 }
@@ -180,6 +192,16 @@ export function onRoomsUpdate(cb: (rooms?: Record<string, Room>) => void) {
   return () => {
     console.log("[rooms] Removing listener, remaining listeners:", listeners.size - 1);
     listeners.delete(cb);
+  };
+}
+
+export function onPlayerMessage(cb: (message: { type: 'joined' | 'left'; playerName: string; roomCode: string }) => void) {
+  console.log("[rooms] Adding message listener, total message listeners:", messageListeners.size + 1);
+  messageListeners.add(cb);
+  ensureSocket();
+  return () => {
+    console.log("[rooms] Removing message listener, remaining message listeners:", messageListeners.size - 1);
+    messageListeners.delete(cb);
   };
 }
 

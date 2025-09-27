@@ -134,6 +134,8 @@ export interface SocketEvents {
   'rooms:updatePlayer': (code: string, player: Player, callback: (error: any, room?: Room) => void) => void;
   'rooms:start': (code: string, callback: (error: any, room?: Room) => void) => void;
   'rooms:update': (rooms: Record<string, Room>) => void;
+  'player:joined': (data: { playerName: string; roomCode: string }) => void;
+  'player:left': (data: { playerName: string; roomCode: string }) => void;
 }
 
 /**

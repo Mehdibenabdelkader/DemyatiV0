@@ -68,6 +68,8 @@ export interface SocketEvents {
   'rooms:updatePlayer': (code: string, player: Player, callback: (error: any, room?: Room) => void) => void;
   'rooms:start': (code: string, callback: (error: any, room?: Room) => void) => void;
   'rooms:update': (rooms: Record<string, Room>) => void;
+  'player:joined': (data: { playerName: string; roomCode: string }) => void;
+  'player:left': (data: { playerName: string; roomCode: string }) => void;
 }
 
 /**
@@ -137,7 +139,9 @@ export const SOCKET_EVENTS = {
   ROOMS_LEAVE: 'rooms:leave',         // Leave a room
   ROOMS_UPDATE_PLAYER: 'rooms:updatePlayer', // Update player information
   ROOMS_START: 'rooms:start',         // Start the game in a room
-  ROOMS_UPDATE: 'rooms:update'        // Broadcast room updates to all clients
+  ROOMS_UPDATE: 'rooms:update',       // Broadcast room updates to all clients
+  PLAYER_JOINED: 'player:joined',     // Broadcast when a player joins
+  PLAYER_LEFT: 'player:left'          // Broadcast when a player leaves
 } as const;
 
 /**

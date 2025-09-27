@@ -60,6 +60,16 @@ const io = new Server(server, {
 const rooms: Record<string, Room> = {};
 
 /**
+ * Player Connection Tracking
+ * 
+ * Tracks which socket is connected to which room and player.
+ * This allows us to handle disconnections and broadcast appropriate messages.
+ * 
+ * Structure: { [socketId]: { roomCode: string, playerId: string } }
+ */
+const playerConnections: Record<string, { roomCode: string; playerId: string }> = {};
+
+/**
  * HTTP REST API ENDPOINTS
  * 
  * These endpoints provide a RESTful API for room management.
@@ -203,6 +213,10 @@ io.on('connection', (socket) => {
     
     // Store room and broadcast to all clients
     rooms[code] = room;
+    
+    // Track host connection
+    playerConnections[socket.id] = { roomCode: code, playerId: host.id };
+    
     console.log(`[backend] Socket created room ${code} for host ${host.name} (${host.id})`);
     io.emit(SOCKET_EVENTS.ROOMS_UPDATE, rooms);
     if (typeof cb === 'function') cb(null, room);
@@ -220,7 +234,9 @@ io.on('connection', (socket) => {
    * 2. Validate player data
    * 3. Remove any existing player with same ID
    * 4. Add new player to room
-   * 5. Broadcast update to all clients
+   * 5. Track player connection
+   * 6. Broadcast update to all clients
+   * 7. Broadcast join message to room
    * 
    * @param code - 4-digit room code to join
    * @param player - Player object to add to the room
@@ -234,6 +250,10 @@ io.on('connection', (socket) => {
       return cb && cb({ error: 'invalid player data' });
     }
     
+    // Check if this is a reconnection (player already exists in room)
+    const existingPlayer = room.players.find((p) => p.id === player.id);
+    const isReconnection = !!existingPlayer;
+    
     // Remove existing player with same ID (for reconnection)
     room.players = room.players.filter((p) => p.id !== player.id);
     
@@ -242,8 +262,20 @@ io.on('connection', (socket) => {
     room.players.push({ ...sanitizedPlayer, tile: 1 });
     rooms[code] = room;
     
+    // Track player connection
+    playerConnections[socket.id] = { roomCode: code, playerId: player.id };
+    
     // Broadcast update to all clients
     io.emit(SOCKET_EVENTS.ROOMS_UPDATE, rooms);
+    
+    // Broadcast join message to all clients in the room
+    io.emit(SOCKET_EVENTS.PLAYER_JOINED, { 
+      playerName: player.name, 
+      roomCode: code 
+    });
+    
+    console.log(`[backend] Player ${player.name} ${isReconnection ? 'rejoined' : 'joined'} room ${code}`);
+    
     if (typeof cb === 'function') cb(null, room);
   });
 
@@ -256,10 +288,13 @@ io.on('connection', (socket) => {
    * 
    * Process:
    * 1. Validate room exists
-   * 2. Remove player from room
-   * 3. If host left and no players remain, delete room
-   * 4. Otherwise, keep room alive
-   * 5. Broadcast update to all clients
+   * 2. Get player name before removal
+   * 3. Remove player from room
+   * 4. Clean up connection tracking
+   * 5. If host left and no players remain, delete room
+   * 6. Otherwise, keep room alive
+   * 7. Broadcast update to all clients
+   * 8. Broadcast leave message to room
    * 
    * @param code - 4-digit room code to leave
    * @param playerId - ID of the player leaving
@@ -272,12 +307,19 @@ io.on('connection', (socket) => {
       return cb && cb({ error: 'not found' });
     }
     
-    console.log(`[backend] Player ${playerId} leaving room ${code}, current players:`, room.players.length);
+    // Get player name before removal for broadcast message
+    const leavingPlayer = room.players.find((p) => p.id === playerId);
+    const playerName = leavingPlayer?.name || 'Unknown Player';
+    
+    console.log(`[backend] Player ${playerName} (${playerId}) leaving room ${code}, current players:`, room.players.length);
     console.log(`[backend] Room host: ${room.hostId}, leaving player: ${playerId}`);
     console.log(`[backend] Total rooms before leave:`, Object.keys(rooms).length);
     
     // Remove player from room
     room.players = room.players.filter((p) => p.id !== playerId);
+    
+    // Clean up connection tracking
+    delete playerConnections[socket.id];
     
     // Only delete room if host explicitly leaves AND there are no other players
     // This prevents accidental room deletion during navigation
@@ -292,6 +334,13 @@ io.on('connection', (socket) => {
     
     // Broadcast update to all clients
     io.emit(SOCKET_EVENTS.ROOMS_UPDATE, rooms);
+    
+    // Broadcast leave message to all clients in the room
+    io.emit(SOCKET_EVENTS.PLAYER_LEFT, { 
+      playerName: playerName, 
+      roomCode: code 
+    });
+    
     if (typeof cb === 'function') cb(null, { ok: true });
   });
 
@@ -356,12 +405,40 @@ io.on('connection', (socket) => {
   /**
    * Handle socket disconnect
    * 
-   * Currently a no-op, but could be extended to handle cleanup
-   * when clients disconnect unexpectedly.
+   * Handles cleanup when clients disconnect unexpectedly.
+   * This includes broadcasting leave messages and cleaning up connection tracking.
+   * However, we keep the player in the room so they can rejoin.
    */
   socket.on('disconnect', () => {
-    // no-op for now
     console.log('socket disconnected', socket.id);
+    
+    // Check if this socket was connected to a room
+    const connection = playerConnections[socket.id];
+    if (connection) {
+      const { roomCode, playerId } = connection;
+      const room = rooms[roomCode];
+      
+      if (room) {
+        // Find the player to get their name
+        const player = room.players.find((p) => p.id === playerId);
+        const playerName = player?.name || 'Unknown Player';
+        
+        console.log(`[backend] Player ${playerName} (${playerId}) disconnected from room ${roomCode}`);
+        
+        // Broadcast leave message to all clients in the room
+        io.emit(SOCKET_EVENTS.PLAYER_LEFT, { 
+          playerName: playerName, 
+          roomCode: roomCode 
+        });
+        
+        // Note: We don't remove the player from the room here
+        // This allows them to rejoin when they reconnect
+        // The player will be replaced when they rejoin via rooms:join
+      }
+      
+      // Clean up connection tracking
+      delete playerConnections[socket.id];
+    }
   });
 });
 

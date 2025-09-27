@@ -20,7 +20,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Lobby from "./Lobby";
-import { getRoom, onRoomsUpdate, updatePlayer } from "../lib/rooms";
+import { getRoom, onRoomsUpdate, updatePlayer, onPlayerMessage } from "../lib/rooms";
 
 /**
  * Props interface for the Game component
@@ -59,6 +59,7 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
   const [players, setPlayers] = useState<Array<{ id: string; name: string; color: string; ready: boolean; tile?: number }>>([]);
   const [lastRoll, setLastRoll] = useState<number | null>(null);
   const [screenWidth, setScreenWidth] = useState<number>(0);
+  const [messages, setMessages] = useState<Array<{ id: string; type: 'joined' | 'left'; playerName: string; timestamp: number }>>([]);
 
   /**
    * Prime Numbers Calculation
@@ -131,6 +132,37 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
     if (!roomCode) return;
     syncRoom(roomCode);
     const unsub = onRoomsUpdate(() => syncRoom(roomCode));
+    return () => unsub && unsub();
+  }, [roomCode]);
+
+  /**
+   * Effect hook for player message handling
+   * 
+   * Listens for player join/leave messages and displays them to the user.
+   * Messages are filtered to only show messages for the current room.
+   */
+  useEffect(() => {
+    if (!roomCode) return;
+    
+    const unsub = onPlayerMessage((message) => {
+      // Only show messages for the current room
+      if (message.roomCode === roomCode) {
+        const newMessage = {
+          id: `${message.type}-${message.playerName}-${Date.now()}`,
+          type: message.type,
+          playerName: message.playerName,
+          timestamp: Date.now()
+        };
+        
+        setMessages(prev => [...prev, newMessage]);
+        
+        // Auto-remove message after 5 seconds
+        setTimeout(() => {
+          setMessages(prev => prev.filter(msg => msg.id !== newMessage.id));
+        }, 5000);
+      }
+    });
+    
     return () => unsub && unsub();
   }, [roomCode]);
 
@@ -249,6 +281,37 @@ export default function Game({ roomCode: propRoomCode, nickname, mode, started: 
   }
   return (
     <div style={{ padding: 18, minHeight: "100vh", background: "transparent", color: "var(--foreground)" }}>
+      {/* Player Connection Messages */}
+      {messages.length > 0 && (
+        <div style={{
+          position: "fixed",
+          top: 20,
+          right: 20,
+          zIndex: 1000,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8
+        }}>
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 6,
+                background: message.type === 'joined' ? "#10b981" : "#ef4444",
+                color: "white",
+                fontSize: 14,
+                fontWeight: 500,
+                boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+                animation: "slideIn 0.3s ease-out"
+              }}
+            >
+              {message.type === 'joined' ? '🎉' : '👋'} {message.playerName} {message.type === 'joined' ? 'joined' : 'left'} the game
+            </div>
+          ))}
+        </div>
+      )}
+
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <button onClick={onBack} style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--accent-100)" }}>
